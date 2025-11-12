@@ -1,10 +1,10 @@
 name: Camera Data Migration
 
 on:
-  # Chạy theo lịch - mỗi ngày lúc 2:00 AM UTC
+  # Chạy theo lịch - mỗi 6 giờ một lần
   schedule:
-    - cron: '0 2 * * *'
-  
+    - cron: '0 */6 * * *'
+
   # Cho phép chạy thủ công từ GitHub UI
   workflow_dispatch:
     inputs:
@@ -17,18 +17,18 @@ on:
         description: 'Maximum number of batches to process (leave empty for all)'
         required: false
         type: string
-      dry_run:
-        description: 'Run in dry-run mode (no actual changes)'
+      max_runtime:
+        description: 'Maximum runtime in seconds (default: 19800 = 5h30m)'
         required: false
-        default: false
-        type: boolean
+        default: '19800'
+        type: string
 
 jobs:
   migrate-camera-data:
     runs-on: ubuntu-latest
-    
-    # Timeout after 30 minutes
-    timeout-minutes: 30
+
+    # Timeout after 5h30 (330 minutes)
+    timeout-minutes: 330
     
     steps:
       - name: Checkout repository
@@ -50,11 +50,13 @@ jobs:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           BATCH_SIZE: ${{ github.event.inputs.batch_size || '1000' }}
           MAX_BATCHES: ${{ github.event.inputs.max_batches }}
+          MAX_RUNTIME: ${{ github.event.inputs.max_runtime || '19800' }}
         run: |
           echo "Starting camera data migration..."
           echo "Batch size: ${BATCH_SIZE}"
           echo "Max batches: ${MAX_BATCHES:-unlimited}"
-          
+          echo "Max runtime: ${MAX_RUNTIME} seconds ($(echo "scale=2; ${MAX_RUNTIME}/3600" | bc) hours)"
+
           python camera_migration.py
           
       - name: Generate migration report
@@ -87,10 +89,7 @@ jobs:
                   
                   cur.execute('SELECT COUNT(*) FROM public.camera_locations;')
                   location_count = cur.fetchone()[0]
-                  
-                  cur.execute('SELECT COUNT(*) FROM public.camera_devices;')
-                  device_count = cur.fetchone()[0]
-                  
+
                   # Create report
                   report = {
                       'timestamp': datetime.utcnow().isoformat(),
@@ -99,8 +98,7 @@ jobs:
                           'processed': record_stats[1],
                           'with_camera_data': record_stats[2]
                       },
-                      'camera_locations': location_count,
-                      'camera_devices': device_count
+                      'camera_locations': location_count
                   }
                   
                   print('=== Migration Report ===')
