@@ -112,22 +112,23 @@ class CameraMigration:
             raise
             
     def fetch_unprocessed_records(self, batch_size: int = 1000) -> List[Dict]:
-        """Fetch unprocessed records from coordinate_speed table"""
+        """Fetch unprocessed records from coordinate_speed table with api_fetch_status = 'pending'"""
         try:
             query = """
-            SELECT id, camera_response 
-            FROM public.coordinate_speed 
-            WHERE camera_response IS NOT NULL 
+            SELECT id, camera_response
+            FROM public.coordinate_speed
+            WHERE camera_response IS NOT NULL
             AND camera_response != ''
             AND (camera_processed IS FALSE OR camera_processed IS NULL)
+            AND api_fetch_status = 'pending'
             LIMIT %s;
             """
-            
+
             self.cursor.execute(query, (batch_size,))
             records = self.cursor.fetchall()
-            logger.info(f"Fetched {len(records)} unprocessed records")
+            logger.info(f"Fetched {len(records)} unprocessed records with api_fetch_status = 'pending'")
             return records
-            
+
         except Exception as e:
             logger.error(f"Failed to fetch records: {e}")
             raise
@@ -270,6 +271,7 @@ class CameraMigration:
                        COUNT(CASE WHEN camera_response IS NOT NULL
                              AND camera_response != ''
                              AND (camera_processed IS FALSE OR camera_processed IS NULL)
+                             AND api_fetch_status = 'pending'
                              THEN 1 END) as pending
                 FROM public.coordinate_speed;
             """)
